@@ -34,33 +34,36 @@ pem using openssl like this:
 
 You can then run this server like this:
 
-    python3 https.py --host 192.168.1.102 --port 4443 your-server.key your-server.cer
+    python3 https.py --port 4443 your-server.key your-server.cer
+
+By default this listens to all addresses by using the ipv6 null address :: – this *also* listens
+for ipv4 connections (!).
 """
 import argparse
 import http.server
+import socket
 import ssl
 
 
+class HTTPServerV6(http.server.HTTPServer):
+    address_family = socket.AF_INET6
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run an HTTPS server to serve your current directory')
     parser.add_argument('keyfile')
     parser.add_argument('certfile')
-    parser.add_argument('--host', default='localhost')
+    parser.add_argument('--host', default='')
     parser.add_argument('--port', type=int, default=4443)
     args = parser.parse_args()
 
-    print(f'Binding to {args.host}:{args.port}')
-    httpd = http.server.HTTPServer(
-        (args.host, args.port), http.server.SimpleHTTPRequestHandler
-    )
     print(f'Using keyfile {args.keyfile}')
     print(f'Using certificate {args.certfile}')
-    httpd.socket = ssl.wrap_socket(
-        httpd.socket,
-        keyfile=args.keyfile,
-        certfile=args.certfile,
-        server_side=True,
+    httpd = HTTPServerV6(
+        (args.host, args.port), http.server.SimpleHTTPRequestHandler
     )
+    print(f'Listening on address {httpd.server_address}')
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(args.certfile, keyfile=args.keyfile)
+    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
     httpd.serve_forever()
